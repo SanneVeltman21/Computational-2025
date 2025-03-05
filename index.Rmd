@@ -1,0 +1,107 @@
+---
+title: "Dashboard"
+author: "Sanne Veltman"
+date: "2025-02-19"
+output: 
+  flexdashboard::flex_dashboard:
+    storyboard: true
+---
+
+### Introduction
+
+My name is Sanne Veltman and for the course computational Musicology I am analyzing the music of my roommate. The names of the tracks are "Ga Maar" and "Niks Meer Over". The music is about important things in life like mental health awareness. 
+
+More to information to add
+
+```{r setup, message = FALSE}
+#libraries
+library(tidyverse)
+source("compmus.R")
+```
+
+### First tab
+
+```{r}
+"features/sanne-v-1.json" |>                           # Change the track
+  compmus_chroma(norm = "identity") |>                 # Change the norm
+  ggplot(aes(x = time, y = pc, fill = value)) + 
+  geom_raster() +
+  scale_y_continuous(
+    breaks = 0:11,
+    minor_breaks = NULL,
+    labels = c(
+                "C", "C#|Db", "D", "D#|Eb",
+                "E", "F", "F#|Gb", "G",
+                "G#|Ab", "A", "A#|Bb", "B"
+              )
+  ) +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = NULL, fill = NULL) +
+  theme_classic() 
+```
+
+***
+
+Here is a description.
+
+### (ceptogram)
+
+```{r}
+"features/sanne-v-1.json" |>                           # Change the track
+  compmus_mfccs(norm = "identity") |>                  # Change the norm
+  ggplot(aes(x = time, y = mfcc, fill = value)) + 
+  geom_raster() +
+  scale_y_continuous(
+    breaks = 0:12,
+    minor_breaks = NULL,
+  ) +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = "Coefficient Number", fill = NULL) +
+  theme_classic()                                      # Change the theme?
+```
+
+***
+
+Here is a description.
+
+### Chroma-based self - similarity
+
+```{r}
+"features/sanne-v-1.json" |>                           # Change the track
+  compmus_chroma(norm = "identity") |>                 # Change the norm
+  compmus_self_similarity(
+    feature = pc,
+    distance = "euclidean"                             # Change the distance
+  ) |>   
+  ggplot(aes(x = xtime, y = ytime, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = NULL, fill = NULL) +
+  theme_classic()                                      # Change the theme?
+```
+
+***
+
+Here is a description.
+
+### timbregram
+
+```{r}
+"features/sanne-v-1.json" |>                           # Change the track
+  compmus_mfccs(norm = "identity") |>                  # Change the norm
+  compmus_self_similarity(
+    feature = mfcc,
+    distance = "euclidean"                             # Change the distance
+  ) |>   
+  ggplot(aes(x = xtime, y = ytime, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = NULL, fill = NULL) +
+  theme_classic()                                      # Change the theme?
+```
+
+***
+
+Here is a description.
+
+
