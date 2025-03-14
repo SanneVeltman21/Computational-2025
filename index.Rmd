@@ -13,6 +13,112 @@ library(tidyverse)
 source("compmus.R")
 ```
 
+### Energy novelty
+
+
+
+```{r}
+"features/sanne-v-1.json" |>
+  compmus_energy_novelty() |> 
+  ggplot(aes(t, novelty)) +
+  geom_line() +
+  theme_minimal() +
+  labs(x = "Time (s)", y = "Energy Novelty")
+```
+
+```{r}
+"features/sanne-v-2.json" |>
+  compmus_energy_novelty() |> 
+  ggplot(aes(t, novelty)) +
+  geom_line() +
+  theme_minimal() +
+  labs(x = "Time (s)", y = "Energy Novelty")
+```
+
+
+
+***
+**What is visible**
+These graphs represent energy novelty over time in seconds. The graph from the first track has a high peak surpassing 2.0 The highest peak in the second graph is below 1.0, meaning that the most intense energy change is less extreme compared to the first graph. In the first graph there is a prominent spike after 150 seconds while the second graph does not have nog suc a srong event toward the end. The overall energy novelty values in the second graph appear lower, meaning there are fewer dramatic changes in energy compared to the firs graph. The first graph has more periods of very low activity between bursts, while the second graph maintains a more consistent level of fluctuations.
+
+
+
+
+### Tempogram track 1
+
+
+```{r}
+"features/sanne-v-1.json" |>
+  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = FALSE) |>
+  ggplot(aes(x = time, y = bpm, fill = power)) +
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +
+  labs(x = "Time (s)", y = "Tempo (BPM)") +
+  theme_classic()
+```
+
+
+
+
+
+```{r}
+"features/sanne-v-1.json" |>
+  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = TRUE) |>
+  ggplot(aes(x = time, y = bpm, fill = power)) +
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +
+  labs(x = "Time (s)", y = "Tempo (BPM)") +
+  theme_classic()
+```
+
+
+
+
+
+***
+
+**What is visible?**
+In the first tempogram, which the is non - cyclic tempogram of track 1, shows multiple tempo candidates accross different BPM values. It a more complex structure, this is possibly reflecting tempo ambiguities or polyrhythms within the track. The tempo appears less stable, with more fluctuations over time. This suggests the analysis does not assume periodic repetition, leading to more variability in detected tempo values. The second tempogram is the cycles tempogram version of track one, displays a clearer more stable tempo band. It shows periodic patterns, meaning the analysis assumes a cyclic structure in the music. The dominant tempo line is stronger and more continuous, relflecting the assumption that rhythmic patterns repeat over time. In the non - cyclic case, the analysis does not assume repeating rhythmic patterns, leding to more tempo variations. In the cyclic case, the analysis enforces periodicity, resulting in a more stable and structured tempo variation. This suggests that the piece has some level of rhythmic repetition, which is better captured in the cyclic analysis. In the non - cyclic case, more tempo variations and ambiguities are visible. 
+
+
+
+### Tempogram track 2
+
+
+```{r}
+"features/sanne-v-2.json" |>
+  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = FALSE) |>
+  ggplot(aes(x = time, y = bpm, fill = power)) +
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +
+  labs(x = "Time (s)", y = "Tempo (BPM)") +
+  theme_classic()
+```
+
+
+
+
+
+
+```{r}
+"features/sanne-v-2.json" |>
+  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = TRUE) |>
+  ggplot(aes(x = time, y = bpm, fill = power)) +
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +
+  labs(x = "Time (s)", y = "Tempo (BPM)") +
+  theme_classic()
+```
+
+
+
+
+
+***
+**What is visible**
+This tempogram is a non - cylic version of track 2. According to the tempogram there are multiple strong tempo candidates. Several horizontal bands at different BPM values indicate multiple tempo interpretations. There is a sudden transition around 50 seconds, there is a sharp change in the structure which is possibly marking a change in musical section or rhythmic pattern. There is a higher tempo ambiguity in the first section. The first half, before the 50 seconds, shows a more dense and fluctuating tempo pattern. This suggests rhythmic complexity or variations. In the second part of the tempogram there is a more stable tempo. After the transition, the dominant tempo lines become clearer and more stable. This indicates a more regular rhythmic pattern. 
+
+
 
 ```{r}
 #      C     C#    D     Eb    E     F     F#    G     Ab    A     Bb    B
@@ -218,6 +324,7 @@ ggplot(df, aes(x = labels, y = waarden, fill = labels)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Draaien van de labels
 
 ```
+
 
 
 
