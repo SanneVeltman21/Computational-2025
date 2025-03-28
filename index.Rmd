@@ -8,7 +8,6 @@ output:
 ---
 
 
-
 ```{r setup, message = FALSE}
 #libraries
 library(tidyverse)
@@ -20,276 +19,6 @@ library(plotly)
 source("compmus.R")
 compmus2025 <- read_csv("compmus2025.csv")
 ```
-
-
-```{r}
-source("compmus.R")
-
-get_conf_mat <- function(fit) {
-  outcome <- .get_tune_outcome_names(fit)
-  fit |> 
-    collect_predictions() |> 
-    conf_mat(truth = outcome, estimate = .pred_class)
-}  
-
-get_pr <- function(fit) {
-  fit |> 
-    conf_mat_resampled() |> 
-    group_by(Prediction) |> mutate(precision = Freq / sum(Freq)) |> 
-    group_by(Truth) |> mutate(recall = Freq / sum(Freq)) |> 
-    ungroup() |> filter(Prediction == Truth) |> 
-    select(class = Prediction, precision, recall)
-}  
-```
-
-```{r}
-cluster_juice <-
-  recipe(
-    filename ~
-      arousal +
-      danceability +
-      instrumentalness +
-      tempo +
-      valence,
-    data = compmus2025
-  ) |>
-  step_center(all_predictors()) |>
-  step_scale(all_predictors()) |> 
-  # step_range(all_predictors()) |> 
-  prep(compmus2025) |>
-  juice() |>
-  column_to_rownames("filename")
-```
-
-```{r}
-compmus_dist <- dist(cluster_juice, method = "euclidean")
-```
-
-
-### Hierachical clustering
-```{r}
-compmus_dist |> 
-  hclust(method = "average") |> # Try single, average, and complete.
-  dendro_data() |>
-  ggdendrogram()
-```
-
-```{r}
-compmus2025_filtered <- 
-  compmus2025 |> filter(!is.na(ai)) |> 
-  mutate(ai = factor(if_else(ai, "AI", "Non-AI")))
-```
-
-
-### Classification
-
-
-```{r}
-classification_recipe <-
-  recipe(
-    ai ~
-      arousal +
-      danceability +
-      instrumentalness +
-      tempo +
-      valence,
-    data = compmus2025_filtered
-  ) |>
-  step_center(all_predictors()) |>
-  step_scale(all_predictors())      # Converts to z-scores.
-  # step_range(all_predictors())    # Sets range to [0, 1]
-```
-
-```{r}
-compmus_cv <- compmus2025_filtered |> vfold_cv(5)
-```
-
-```{r}
-knn_model <-
-  nearest_neighbor(neighbors = 1) |>
-  set_mode("classification") |> 
-  set_engine("kknn")
-classification_knn <- 
-  workflow() |> 
-  add_recipe(classification_recipe) |> 
-  add_model(knn_model) |> 
-  fit_resamples(compmus_cv, control = control_resamples(save_pred = TRUE))
-```
-
-
-### Classification
-
-
-```{r}
-classification_knn |> get_conf_mat()
-```
-```{r}
-classification_knn |> get_conf_mat() |> autoplot(type = "heatmap")
-```
-
-```{r}
-classification_knn |> get_pr()
-```
-
-
-
-
-```{r}
-forest_model <-
-  rand_forest() |>
-  set_mode("classification") |> 
-  set_engine("ranger", importance = "impurity")
-indie_forest <- 
-  workflow() |> 
-  add_recipe(classification_recipe) |> 
-  add_model(forest_model) |> 
-  fit_resamples(
-    compmus_cv, 
-    control = control_resamples(save_pred = TRUE)
-  )
-```
-
-```{r}
-indie_forest |> get_pr()
-```
-```{r}
-workflow() |> 
-  add_recipe(classification_recipe) |> 
-  add_model(forest_model) |> 
-  fit(compmus2025_filtered) |> 
-  pluck("fit", "fit", "fit") |>
-  ranger::importance() |> 
-  enframe() |> 
-  mutate(name = fct_reorder(name, value)) |> 
-  ggplot(aes(name, value)) + 
-  geom_col() + 
-  coord_flip() +
-  theme_minimal() +
-  labs(x = NULL, y = "Importance")
-```
-```{r}
-compmus2025_filtered |>
-  ggplot(aes(x = valence, y = arousal, colour = ai, size = tempo)) +
-  geom_point(alpha = 0.8) +
-  scale_color_viridis_d() +
-  labs(
-    x = "Arousal",
-    y = "Dancebility",
-    size = "Tempo",
-    colour = "AI"
-  )
-```
-
-
-
-### Energy novelty
-
-
-
-```{r}
-"features/sanne-v-1.json" |>
-  compmus_energy_novelty() |> 
-  ggplot(aes(t, novelty)) +
-  geom_line() +
-  theme_minimal() +
-  labs(x = "Time (s)", y = "Energy Novelty")
-```
-
-
-
-```{r}
-"features/sanne-v-2.json" |>
-  compmus_energy_novelty() |> 
-  ggplot(aes(t, novelty)) +
-  geom_line() +
-  theme_minimal() +
-  labs(x = "Time (s)", y = "Energy Novelty")
-```
-
-
-
-***
-**What is visible**
-These graphs represent energy novelty over time in seconds. The graph from the first track has a high peak surpassing 2.0 The highest peak in the second graph is below 1.0, meaning that the most intense energy change is less extreme compared to the first graph. In the first graph there is a prominent spike after 150 seconds while the second graph does not have nog suc a srong event toward the end. The overall energy novelty values in the second graph appear lower, meaning there are fewer dramatic changes in energy compared to the firs graph. The first graph has more periods of very low activity between bursts, while the second graph maintains a more consistent level of fluctuations.
-
-
-
-
-### Tempogram track 1
-
-
-```{r}
-"features/sanne-v-1.json" |>
-  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = FALSE) |>
-  ggplot(aes(x = time, y = bpm, fill = power)) +
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +
-  labs(x = "Time (s)", y = "Tempo (BPM)") +
-  theme_classic()
-```
-
-
-
-
-
-```{r}
-"features/sanne-v-1.json" |>
-  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = TRUE) |>
-  ggplot(aes(x = time, y = bpm, fill = power)) +
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +
-  labs(x = "Time (s)", y = "Tempo (BPM)") +
-  theme_classic()
-```
-
-
-
-
-
-***
-
-**What is visible?**
-In the first tempogram, which the is non - cyclic tempogram of track 1, shows multiple tempo candidates accross different BPM values. It a more complex structure, this is possibly reflecting tempo ambiguities or polyrhythms within the track. The tempo appears less stable, with more fluctuations over time. This suggests the analysis does not assume periodic repetition, leading to more variability in detected tempo values. The second tempogram is the cycles tempogram version of track one, displays a clearer more stable tempo band. It shows periodic patterns, meaning the analysis assumes a cyclic structure in the music. The dominant tempo line is stronger and more continuous, relflecting the assumption that rhythmic patterns repeat over time. In the non - cyclic case, the analysis does not assume repeating rhythmic patterns, leding to more tempo variations. In the cyclic case, the analysis enforces periodicity, resulting in a more stable and structured tempo variation. This suggests that the piece has some level of rhythmic repetition, which is better captured in the cyclic analysis. In the non - cyclic case, more tempo variations and ambiguities are visible. 
-
-
-
-### Tempogram track 2
-
-
-```{r}
-"features/sanne-v-2.json" |>
-  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = FALSE) |>
-  ggplot(aes(x = time, y = bpm, fill = power)) +
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +
-  labs(x = "Time (s)", y = "Tempo (BPM)") +
-  theme_classic()
-```
-
-
-
-
-
-
-```{r}
-"features/sanne-v-2.json" |>
-  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = TRUE) |>
-  ggplot(aes(x = time, y = bpm, fill = power)) +
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +
-  labs(x = "Time (s)", y = "Tempo (BPM)") +
-  theme_classic()
-```
-
-
-
-
-
-***
-**What is visible**
-This tempogram is a non - cylic version of track 2. According to the tempogram there are multiple strong tempo candidates. Several horizontal bands at different BPM values indicate multiple tempo interpretations. There is a sudden transition around 50 seconds, there is a sharp change in the structure which is possibly marking a change in musical section or rhythmic pattern. There is a higher tempo ambiguity in the first section. The first half, before the 50 seconds, shows a more dense and fluctuating tempo pattern. This suggests rhythmic complexity or variations. In the second part of the tempogram there is a more stable tempo. After the transition, the dominant tempo lines become clearer and more stable. This indicates a more regular rhythmic pattern. 
-
-
 
 ```{r}
 #      C     C#    D     Eb    E     F     F#    G     Ab    A     Bb    B
@@ -376,131 +105,155 @@ key_templates <-
 ```
 
 
-### Key and chord estimation
-
-#### Key estimation track 1
-
-```{r}
-"features/sanne-v-1.json" |> 
-  compmus_chroma(norm = "identity") |> 
-  compmus_match_pitch_templates(
-    key_templates,         # Change to chord_templates if desired
-    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
-    distance = "cosine"   # Try different distance metrics
-  ) |>
-  ggplot(aes(x = time, y = name, fill = d)) + 
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +               # Change the colours?
-  labs(x = "Time (s)", y = "Template", fill = NULL) +
-  theme_classic()  
-```
-
-
-#### Key estimation track 2
-
-
-```{r}
-"features/sanne-v-2.json" |> 
-  compmus_chroma(norm = "identity") |> 
-  compmus_match_pitch_templates(
-    key_templates,         # Change to chord_templates if desired
-    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
-    distance = "cosine"   # Try different distance metrics
-  ) |>
-  ggplot(aes(x = time, y = name, fill = d)) + 
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +               # Change the colours?
-  labs(x = "Time (s)", y = "Template", fill = NULL) +
-  theme_classic()  
-```
-
-
-#### Chord estimation
-
-#### Chord estimation track 1
-
-```{r}
-"features/sanne-v-1.json" |> 
-  compmus_chroma(norm = "identity") |> 
-  compmus_match_pitch_templates(
-    chord_templates,         # Change to chord_templates if desired
-    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
-    distance = "cosine"   # Try different distance metrics
-  ) |>
-  ggplot(aes(x = time, y = name, fill = d)) + 
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +               # Change the colours?
-  labs(x = "Time (s)", y = "Template", fill = NULL) +
-  theme_classic()  
-```
-
-
-#### Chord estimation track 2
-
-
-```{r}
-"features/sanne-v-2.json" |> 
-  compmus_chroma(norm = "identity") |> 
-  compmus_match_pitch_templates(
-    chord_templates,         # Change to chord_templates if desired
-    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
-    distance = "cosine"   # Try different distance metrics
-  ) |>
-  ggplot(aes(x = time, y = name, fill = d)) + 
-  geom_raster() +
-  scale_fill_viridis_c(guide = "none") +               # Change the colours?
-  labs(x = "Time (s)", y = "Template", fill = NULL) +
-  theme_classic()  
-```
-
-
-
-
-
-
-
-
-
 
 
 ### Introduction
+Welcome to my portfolio for the course computational musicology!
 
-My name is Sanne Veltman and for the course computational Musicology I am analyzing the music of my roommate. The names of the tracks are "Ga Maar" and "Niks Meer Over". The music is about important things in life like mental health awareness. I chose these tracks because I really like them and I think the music is unique and important! 
+My name is Sanne Veltman, and for this course, I am analyzing the music of my roommate. Specifically, I will be examining two tracks by the artist HONEY: Ga Maar and Niks Meer Over. These songs explore significant themes in life. I selected these tracks not only because I find them musically compelling and unique but also because they convey important messages that deserve attention.
 
-More to information to add
+HONEY’s music is truly inspiring, as it addresses topics that are often surrounded by taboos or societal stigma, such as neurodiversity and mental health. Personally, I believe it is crucial to discuss these subjects, especially as mental well-being is an important aspect of my own life. The way music intertwines with these themes makes the listening experience even more profound.
+
+The two tracks I have chosen are in Dutch and differ significantly from one another, as I will demonstrate in the analysis within this portfolio. I highly recommend listening to them—they are certainly worth your time!
+
+Enjoy!
 
 
-### Visualisation histogram
-
-
+### Visualization class corpus versus own tracks
 ```{r}
-# 
 library(ggplot2)
+library(plotly)
+library(dplyr)
 
-# Waarden
-waarden <- c(0.5268, 4.3736, 0.7555, 0.6204, 0.1690, 124, 4.3702)
-labels <- c("Tempo", "Valence", "Approachability", "Arousal", 
-            "Danceability", "Engagingness", "Instrumentalness")
+# Jouw specifieke gegevens als dataframe
+mijn_data <- data.frame(
+  tempo = c(86, 124),  # Juiste tempo-waarden
+  arousal = c(4.658013343811035, 4.370211124420166),
+  instrumentalness = c(0.1643667370080948, 0.16899463534355164),
+  danceability = c(0.6034411191940308, 0.6203578114509583),
+  track = c("Track 1", "Track 2")  # Labels toevoegen
+)
 
-# Dataframe
-df <- data.frame(labels, waarden)
+# Maak de plot met alle tracks
+p <- compmus2025 |>  
+  ggplot(
+    aes(
+      x = tempo,
+      y = arousal,
+      size = instrumentalness,
+      colour = danceability
+    )
+  ) +
+  geom_point(alpha = 0.5) +  # Algemene punten (transparanter)
+  geom_point(                # Jouw eigen punten extra laten opvallen
+    data = mijn_data,
+    aes(x = tempo, y = arousal),
+    size = 5,
+    shape = 21,
+    fill = "red",
+    colour = "black"
+  ) +
+  geom_text(                 # Labels toevoegen bij jouw punten
+    data = mijn_data,
+    aes(label = track),
+    vjust = -1,              
+    size = 4,
+    fontface = "bold"
+  ) +
+  geom_rug(linewidth = 0.1) +
+  scale_x_continuous(
+    limits = c(50, 200),  # Aangepaste limieten zodat alle tracks zichtbaar blijven
+    breaks = c(50, 100, 150, 200),
+    minor_breaks = NULL
+  ) +
+  scale_y_continuous(
+    limits = c(1, 9),
+    breaks = c(1, 5, 9),
+    minor_breaks = NULL
+  ) +
+  scale_colour_viridis_c() +
+  scale_size_continuous(
+    trans = "exp",
+    guide = "none"
+  ) +
+  theme_light() +
+  labs(
+    x = "Tempo",
+    y = "Arousal",
+    colour = "Danceability"
+  )
 
-# Barplot
-ggplot(df, aes(x = labels, y = waarden, fill = labels)) +
-  geom_bar(stat = "identity") +  
-  ggtitle("Music characteristics Visualisation") +
-  xlab("Characteristics") +
-  ylab("Waarde") +
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))  # Draaien van de labels
+ggplotly(p)  # Maak de plot interactief
 
 ```
 
 
 
 
+
+*** 
+**What is visible?**
+in this visualization you see the class corpus based on arousal, tempo and the colors are the danceability. The two red dots show my tracks within the visualisation. The tempo of both of tracks are, This is very interesting to see, it is like a worldmap with all of the tracks from the students! The tempo of my tracks are correct in this visualisation. If I look at the tracks of the other students, I don't see a really significant correlation between tempo or arousal. But if the tempo goes down, you can see that the danceability gets a bit lighter in its color. There could be a possible correlation between tempo and danceability here.
+
+### Histogram class corpus versus own tracks
+
+
+```{r}
+ggplot(compmus2025, aes(x= tempo)) + geom_histogram(binwidth = 5, fill = "orange", color = "black", alpha = 0.7) +
+  theme_classic()
+```
+
 ***
-### Chromagram
+**What is visible?**
+In this class corpus histogram there is an peak at 150 bpm. I found this interesting and I think it is also mistaken because most of the tracks of the other students are less than 150 in tempo as you can see in the visualisation above.
+
+
+
+
+
+
+### Personal value visualisation
+```{r}
+# Data
+values <- c(0.6348810791969299,4.281034469604492,0.6300171613693237,0.6034411191940308,0.1643667370080948,86,4.658013343811035,FALSE)  # AI als 0
+reference_values <- c(0.5268121957778931,4.373618125915527,0.7554579973220825,0.6203578114509583,0.16899463534355164,124,4.370211124420166,FALSE)  # AI als 1
+labels <- c("approachability", "arousal", "danceability", "engagingness", "instrumentalness", "tempo", "valence", "ai")
+
+# Dataframe maken
+df <- data.frame(labels, sannep1 = values, sannep2 = reference_values)
+
+# Data in lange vorm zetten
+df_long <- pivot_longer(df, cols = c("sannep1", "sannep2"), names_to = "Type", values_to = "Value")
+
+# Plotten
+ggplot(df_long, aes(x = labels, y = Value, fill = Type)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  facet_wrap(~labels, scales = "free_y") +  # Aparte y-as per feature
+  ggtitle("Comparison of Features") +
+  xlab("Features") +
+  ylab("Value") +
+  theme_minimal() +
+  scale_fill_manual(values = c("sannep1" = "blue", "sannep2" = "red")) +
+  theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())  # Geen dubbele labels
+```
+
+
+***
+
+**What is visible?**
+This plot provides a visualization of the musical features of my own tracks. I found this representation particularly insightful in enhancing my understanding of their characteristics. The values presented in the visualization appear to be accurate and align with my observations.
+
+Track 2 exhibits a higher danceability score than Track 1, suggesting that it is more rhythmically engaging and better suited for dancing. Both tracks demonstrate similar arousal levels, indicating comparable intensity and energy. The differences in engagingness and instrumentalness are minimal. The similarity in engagingness suggests that both tracks are equally captivating, while the instrumentalness scores indicate a comparable presence of instrumental sections in both compositions.
+
+A notable difference is observed in tempo, with Track 2 having a significantly higher tempo than Track 1. Additionally, both tracks display nearly identical valence scores, implying a similar emotional tone. However, Track 1 has a slightly higher valence, meaning it conveys a somewhat more uplifting mood compared to Track 2. From a personal perspective, this observation aligns with my listening experience of both tracks.
+
+
+
+
+
+### Chromagram 
+
+#### Track 1
 
 ```{r}
 "features/sanne-v-1.json" |>                           # Change the track
@@ -521,11 +274,48 @@ ggplot(df, aes(x = labels, y = waarden, fill = labels)) +
   theme_classic() 
 ```
 
+
+
+
 ***
 
-Here is a description.
 
-### (ceptogram)
+
+#### Track 2
+
+```{r}
+"features/sanne-v-2.json" |>                           # Change the track
+  compmus_chroma(norm = "identity") |>                 # Change the norm
+  ggplot(aes(x = time, y = pc, fill = value)) + 
+  geom_raster() +
+  scale_y_continuous(
+    breaks = 0:11,
+    minor_breaks = NULL,
+    labels = c(
+                "C", "C#|Db", "D", "D#|Eb",
+                "E", "F", "F#|Gb", "G",
+                "G#|Ab", "A", "A#|Bb", "B"
+              )
+  ) +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = NULL, fill = NULL) +
+  theme_classic() 
+```
+
+
+
+
+***
+
+**What is visible?**
+A chromagram is a visual representation of the pitch content of my tracks. This visualization shows how different pitch classes evolve over time.Track 1 is 180 seconds and track 2 approximately 160 seconds. Track 1 is in key D major and track 2 is in key G minor. The fact that these tracks are in D major and G minor is visible within the chromagrams and I checked this with my roommate and this is confirmed! The chromagram did it right!
+
+
+
+
+### Ceptogram 
+
+#### Track 1
 
 ```{r}
 "features/sanne-v-1.json" |>                           # Change the track
@@ -539,13 +329,44 @@ Here is a description.
   scale_fill_viridis_c(guide = "none") +               # Change the colours?
   labs(x = "Time (s)", y = "Coefficient Number", fill = NULL) +
   theme_classic()                                      # Change the theme?
+
 ```
+
+
 
 ***
 
-Here is a description.
 
-### Chroma-based self - similarity
+#### Track 2
+
+```{r}
+"features/sanne-v-2.json" |>                           # Change the track
+  compmus_mfccs(norm = "identity") |>                  # Change the norm
+  ggplot(aes(x = time, y = mfcc, fill = value)) + 
+  geom_raster() +
+  scale_y_continuous(
+    breaks = 0:12,
+    minor_breaks = NULL,
+  ) +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = "Coefficient Number", fill = NULL) +
+  theme_classic() 
+```
+
+
+
+
+
+
+***
+**What is visible?**
+
+These ceptograms provide a visual representation of how the spectral envelope of the audio signal changes over time. This is useful for analyzing the timbre and harmonic structure of my tracks. Both tracks have a dominant energy at the lower coefficients, the bottom part of the plots. The green background in both plots suggests a relatively stable spectral envelope. This means that there is an variation in timbre. The first track show low coeffients alternating yellow and dark blue, from my interpretation this means that there is a low frequency harmonics. The second tracks also have low yellow bands, which means from my interpretation that this is more continuous and stable in timbre and harmonics.
+
+
+### Chroma based self - similarity 
+
+#### Track 1
 
 ```{r}
 "features/sanne-v-1.json" |>                           # Change the track
@@ -558,14 +379,147 @@ Here is a description.
   geom_raster() +
   scale_fill_viridis_c(guide = "none") +               # Change the colours?
   labs(x = "Time (s)", y = NULL, fill = NULL) +
-  theme_classic()                                      # Change the theme?
+  theme_classic()    
 ```
+
+
 
 ***
 
-Here is a description.
 
-### timbregram
+#### Track 2
+
+```{r}
+"features/sanne-v-2.json" |>                           # Change the track
+  compmus_chroma(norm = "identity") |>                 # Change the norm
+  compmus_self_similarity(
+    feature = pc,
+    distance = "euclidean"                             # Change the distance
+  ) |>   
+  ggplot(aes(x = xtime, y = ytime, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = NULL, fill = NULL) +
+  theme_classic() 
+```
+
+
+
+
+***
+
+**What is visible?**
+Track 1 consists of six distinct themes. The first theme is characterized by three repetitions, while the second theme serves as a transition between the first and third themes. At approximately 134 seconds, the fourth section concludes, and the fifth section begins. This transition is also audibly noticeable, as the track shifts from an acappella section to vocals accompanied by instrumentation. Following the fifth section, the track concludes with an outro.
+
+Track 2 is structured into three larger sections and six smaller segments. The first section lasts approximately 50 seconds, the second extends to around 110–120 seconds, and the third continues until the end of the track. A repetition occurs at the end of the first section. Within the second section, there are two smaller thematic segments around the 90-second mark, one of which features a repetition similar to that in the first section. Additionally, after 50 seconds, the distinction between the first and second themes is emphasized through the use of an explicit word..
+
+
+
+### Key estimation 
+
+
+#### Track 1
+
+```{r}
+"features/sanne-v-1.json" |> 
+  compmus_chroma(norm = "identity") |> 
+  compmus_match_pitch_templates(
+    key_templates,         # Change to chord_templates if desired
+    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
+    distance = "cosine"   # Try different distance metrics
+  ) |>
+  ggplot(aes(x = time, y = name, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = "Template", fill = NULL) +
+  theme_classic()  
+```
+
+
+
+***
+
+
+#### Track 2
+
+```{r}
+"features/sanne-v-2.json" |> 
+  compmus_chroma(norm = "identity") |> 
+  compmus_match_pitch_templates(
+    key_templates,         # Change to chord_templates if desired
+    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
+    distance = "cosine"   # Try different distance metrics
+  ) |>
+  ggplot(aes(x = time, y = name, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = "Template", fill = NULL) +
+  theme_classic()  
+```
+
+
+
+*** 
+**What is visible?**
+These key estimation plots visualize how different musical keys are activated throughout the tracks. Each row represent a key, which can we major or minor, and the colors indicate the strength of the presence of that key over time. From my interpretation, both tracks have a similar spread of key activation, with variations occurring over time. The yellow areas indicate stronger activation and this means that those keys are more dominant at those moments. Track 1 in D major and shows a stronger presence of certain keys at the beginning, this is the left side of the plot. Track 2 is in G minor is a bit more consistent in key activation. The yellow bands are more evenly spread compared to track 1. In track 1, something interesting is happening around 130 seconds, there are two dark lines and yellow in the middle. If you listen to the track, more vocals are added to the track. In track 2, something is happening around 50 seconds, this is again when the explicit word is been said and the intensity of the song goes up. There could also be a shift in key at that point. The emotional tone of the tracks are also different. Track 1 is a bit more dramatic and track 2 more uplifting.
+
+
+### Chord estimation 
+
+#### Track 1
+```{r}
+"features/sanne-v-1.json" |> 
+  compmus_chroma(norm = "identity") |> 
+  compmus_match_pitch_templates(
+    chord_templates,         # Change to chord_templates if desired
+    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
+    distance = "cosine"   # Try different distance metrics
+  ) |>
+  ggplot(aes(x = time, y = name, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = "Template", fill = NULL) +
+  theme_classic()  
+```
+
+
+
+***
+
+
+#### Track 2
+
+```{r}
+"features/sanne-v-2.json" |> 
+  compmus_chroma(norm = "identity") |> 
+  compmus_match_pitch_templates(
+    chord_templates,         # Change to chord_templates if desired
+    norm = "identity",       # Try different norms (and match it with what you used in `compmus_chroma`)
+    distance = "cosine"   # Try different distance metrics
+  ) |>
+  ggplot(aes(x = time, y = name, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = "Template", fill = NULL) +
+  theme_classic()  
+```
+
+
+
+
+***
+
+**What is visible?**
+The first track is in D major, while the second track is in G minor. In Track 1, the notes D, E, F#, G, A, B, and C# are present, which correspond to the D major scale.
+
+The tonal structure of the second track is more complex. This complexity arises from the presence of B-flat in the melody. However, G is also prominently featured, suggesting a G minor key, as G minor and B-flat major share the same notes. Additionally, the note D appears more prominently than F. If F were more dominant, the track would likely be in B-flat major. However, since D is more pronounced, it is reasonable to conclude that the track is in G minor.
+
+
+
+
+### Timbregram 
+
+#### Track 1
 
 ```{r}
 "features/sanne-v-1.json" |>                           # Change the track
@@ -578,56 +532,435 @@ Here is a description.
   geom_raster() +
   scale_fill_viridis_c(guide = "none") +               # Change the colours?
   labs(x = "Time (s)", y = NULL, fill = NULL) +
-  theme_classic()                                      # Change the theme?
+  theme_classic()    
 ```
+
+
 
 ***
 
-Here is a description.
+
+#### Track 2
 
 ```{r}
-compmus2025 |>                   # Start with the data
-  ggplot(                     # Set up the plot.
-    aes(
-      x = tempo,
-      y = arousal,
-      size = instrumentalness,
-      colour = danceability
-    )
-  ) +
-  geom_point() +              # Scatter plot.
-  geom_rug(linewidth = 0.1) + # Add 'fringes' to show data distribution.
-  geom_text(                  # Add text labels from above.
-    x = 121,
-    y = 4.91,
-    label = "Onda Corta - Sud America",
-    size = 3,                 # Override size (not loudness here).
-    hjust = "left",           # Align left side of label with the point.
-    vjust = "center",         # Align vertical centre of label with the point.
-    angle = 30                # Rotate the text label
-  ) +
-  scale_x_continuous(         # Fine-tune the x axis.
-    limits = c(50, 200),
-    breaks = c(50, 100, 150, 200), # Specify grid lines
-    minor_breaks = NULL       # Remove 'minor' grid lines.
-  ) +
-  scale_y_continuous(         # Fine-tune the y axis in the same way.
-    limits = c(1, 9),
-    breaks = c(1, 5, 9),
-    minor_breaks = NULL
-  ) +
-  scale_colour_viridis_c() +  # Use the popular viridis colour palette.
-  scale_size_continuous(      # Fine-tune the sizes of each point.
-    trans = "exp",            # Use an exp transformation to emphasise loud..
-    guide = "none"            # Remove the legend for size.
-  ) +
-  theme_light() +             # Use a simpler theme.
-  labs(                       # Make the titles nice.
-    x = "Tempo",
-    y = "Arousal",
-    colour = "Danceability"
+"features/sanne-v-2.json" |>                           # Change the track
+  compmus_mfccs(norm = "identity") |>                  # Change the norm
+  compmus_self_similarity(
+    feature = mfcc,
+    distance = "euclidean"                             # Change the distance
+  ) |>   
+  ggplot(aes(x = xtime, y = ytime, fill = d)) + 
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +               # Change the colours?
+  labs(x = "Time (s)", y = NULL, fill = NULL) +
+  theme_classic()    
+```
+
+
+
+
+***
+
+**What is visible?**
+In Track 1, a clear segmentation is observed, with noticeable transitions occurring around the 50-second and 134-second marks. These transitions suggest distinct sections within the track, likely corresponding to changes in musical or instrumental themes. In particular, the transition at approximately 134 seconds marks a significant shift in the composition, as the track moves from an acappella section to multiple vocal layers accompanied by instrumentation.
+
+In Track 2, the timbre analysis reveals the presence of twelve smaller thematic segments. The first two smaller segments together form a single theme, while the third and fourth segments constitute another distinct theme. Themes 5 through 9 can be grouped as one larger section, although they could also be further subdivided into two smaller parts. Towards the end of the track, the composition is structured into three overarching sections.
+
+
+
+
+### Energy novelty 
+
+#### Track 1
+
+```{r}
+"features/sanne-v-1.json" |>
+  compmus_energy_novelty() |> 
+  ggplot(aes(t, novelty)) +
+  geom_line() +
+  theme_minimal() +
+  labs(x = "Time (s)", y = "Energy Novelty")
+```
+
+
+
+***
+
+
+
+#### Track 2
+```{r}
+"features/sanne-v-2.json" |>
+  compmus_energy_novelty() |> 
+  ggplot(aes(t, novelty)) +
+  geom_line() +
+  theme_minimal() +
+  labs(x = "Time (s)", y = "Energy Novelty")
+```
+
+
+
+
+***
+**What is visible**
+These graphs represent energy novelty over time in seconds. The graph from the first track has a high peak surpassing 2.0 The highest peak in the second graph is below 1.0, meaning that the most intense energy change is less extreme compared to the first graph. In the first graph there is a prominent spike after 150 seconds while the second graph does not have not such a strong event toward the end. The overall energy novelty values in the second graph appear lower, meaning there are fewer dramatic changes in energy compared to the firs graph. The first graph has more periods of very low activity between bursts, while the second graph maintains a more consistent level of fluctuations. In the second track there is a high peak around 50 seconds, this is again explicit word in the track. 
+
+
+### Tempogram track 1
+```{r}
+"features/sanne-v-1.json" |>
+  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = FALSE) |>
+  ggplot(aes(x = time, y = bpm, fill = power)) +
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +
+  labs(x = "Time (s)", y = "Tempo (BPM)") +
+  theme_classic()
+```
+
+
+***
+
+**What is visible?**
+In the first tempogram is a tempogram of track 1, shows multiple tempo candidates across different BPM values. It a more complex structure, this is possibly reflecting tempo ambiguities or polyrhythms within the track. The tempo appears less stable, with more fluctuations over time. This suggests the analysis does not assume periodic repetition, leading to more variability in detected tempo values. The second tempogram is the cycles tempogram version of track one, displays a clearer more stable tempo band. It shows periodic patterns, meaning the analysis assumes a cyclic structure in the music. The dominant tempo line is stronger and more continuous, reflecting the assumption that rhythmic patterns repeat over time. In the non - cyclic case, the analysis does not assume repeating rhythmic patterns, leading to more tempo variations. In the cyclic case, the analysis enforces periodicity, resulting in a more stable and structured tempo variation. This suggests that the piece has some level of rhythmic repetition. The actual BPM of the first track is 87 BPM.
+
+
+
+
+
+### Tempogram track 2
+```{r}
+"features/sanne-v-2.json" |>
+  compmus_tempogram(window_size = 8, hop_size = 1, cyclic = FALSE) |>
+  ggplot(aes(x = time, y = bpm, fill = power)) +
+  geom_raster() +
+  scale_fill_viridis_c(guide = "none") +
+  labs(x = "Time (s)", y = "Tempo (BPM)") +
+  theme_classic()
+```
+
+
+***
+**What is visible**
+This tempogram is a version of track 2. According to the tempogram there are multiple strong tempo candidates. Several horizontal bands at different BPM values indicate multiple tempo interpretations. There is a sudden transition around 50 seconds, there is a sharp change in the structure which is possibly marking a change in musical section or rhythmic pattern. There is a higher tempo ambiguity in the first section. The first half, before the 50 seconds, shows a more dense and fluctuating tempo pattern. This suggests rhythmic complexity or variations. In the second part of the tempogram there is a more stable tempo. After the transition, the dominant tempo lines become clearer and more stable. This indicates a more regular rhythmic pattern. The actual BPM of the second track is 127 BPM.
+
+
+
+
+
+
+
+
+```{r}
+source("compmus.R")
+
+get_conf_mat <- function(fit) {
+  outcome <- .get_tune_outcome_names(fit)
+  fit |> 
+    collect_predictions() |> 
+    conf_mat(truth = outcome, estimate = .pred_class)
+}  
+
+get_pr <- function(fit) {
+  fit |> 
+    conf_mat_resampled() |> 
+    group_by(Prediction) |> mutate(precision = Freq / sum(Freq)) |> 
+    group_by(Truth) |> mutate(recall = Freq / sum(Freq)) |> 
+    ungroup() |> filter(Prediction == Truth) |> 
+    select(class = Prediction, precision, recall)
+}  
+```
+
+
+
+```{r}
+cluster_juice <-
+  recipe(
+    filename ~
+      arousal +
+      danceability +
+      instrumentalness +
+      tempo +
+      valence,
+    data = compmus2025
+  ) |>
+  step_center(all_predictors()) |>
+  step_scale(all_predictors()) |> 
+  # step_range(all_predictors()) |> 
+  prep(compmus2025) |>
+  juice() |>
+  column_to_rownames("filename")
+```
+
+```{r}
+compmus_dist <- dist(cluster_juice, method = "euclidean")
+```
+
+
+### Hierachical clustering
+```{r}
+compmus_dist |> 
+  hclust(method = "average") |> # Try single, average, and complete.
+  dendro_data() |>
+  ggdendrogram()
+```
+
+```{r}
+compmus2025_filtered <- 
+  compmus2025 |> filter(!is.na(ai)) |> 
+  mutate(ai = factor(if_else(ai, "AI", "Non-AI")))
+```
+
+
+***
+
+**What is visible?**
+For this hierarchical clustering visualization I found my own name within the clustering and compared the tracks next to me with my own tracks. I found it really interesting to see and also to listen that these two tracks of my peers were clustered with my tracks because if you listen to my tracks and the tracks for my peers, they are completely different to eachother. 
+
+
+```{r}
+classification_recipe <-
+  recipe(
+    ai ~
+      arousal +
+      danceability +
+      instrumentalness +
+      tempo +
+      valence,
+    data = compmus2025_filtered
+  ) |>
+  step_center(all_predictors()) |>
+  step_scale(all_predictors())      # Converts to z-scores.
+  # step_range(all_predictors())    # Sets range to [0, 1]
+```
+
+```{r}
+compmus_cv <- compmus2025_filtered |> vfold_cv(5)
+```
+
+```{r}
+knn_model <-
+  nearest_neighbor(neighbors = 1) |>
+  set_mode("classification") |> 
+  set_engine("kknn")
+classification_knn <- 
+  workflow() |> 
+  add_recipe(classification_recipe) |> 
+  add_model(knn_model) |> 
+  fit_resamples(compmus_cv, control = control_resamples(save_pred = TRUE))
+```
+
+
+### Classification AI and non-AI
+
+
+
+
+```{r}
+classification_knn |> get_conf_mat()
+```
+```{r}
+classification_knn |> get_conf_mat() |> autoplot(type = "heatmap")
+```
+
+
+***
+
+
+**What is visible**
+This visualization is a confusion matrix that compares AI vs. Non-AI predictions against the actual truth labels. AI correctly classified as AI is 33 times, this is a true positive. Non - AI correctly got classified as Non - AI 22 times, this is a true negative. AI misclassified as Non-AI 16 times, this a false negative and Non-AI got classified as AI 19 times, this is a false positive. 
+
+
+
+```{r}
+classification_knn |> get_pr()
+```
+
+
+
+
+```{r}
+forest_model <-
+  rand_forest() |>
+  set_mode("classification") |> 
+  set_engine("ranger", importance = "impurity")
+indie_forest <- 
+  workflow() |> 
+  add_recipe(classification_recipe) |> 
+  add_model(forest_model) |> 
+  fit_resamples(
+    compmus_cv, 
+    control = control_resamples(save_pred = TRUE)
   )
 ```
+
+
+
+```{r}
+indie_forest |> get_pr()
+```
+
+### Classification corpus
+
+```{r}
+workflow() |> 
+  add_recipe(classification_recipe) |> 
+  add_model(forest_model) |> 
+  fit(compmus2025_filtered) |> 
+  pluck("fit", "fit", "fit") |>
+  ranger::importance() |> 
+  enframe() |> 
+  mutate(name = fct_reorder(name, value)) |> 
+  ggplot(aes(name, value)) + 
+  geom_col() + 
+  coord_flip() +
+  theme_minimal() +
+  labs(x = NULL, y = "Importance")
+```
+
+
+***
+
+**What is visible**
+This bar chart visualizes the importance of different musical features within the class corpus of 2025. According to this bar chart, the most important features are instrumentalness, suggesting that the presence or absence of vocals plays a significant role in the analysis. danceability and arousal follow closely. This indicates that rhythm and energy levels are also crucial factors. Valence has a slightly lowe importance compared to arousal and danceability. The least important feature according to his bar char is tempo. I found this an interesting outcome of the bar chart. 
+
+
+
+
+### Classification corpus AI and non - AI danceability and arousal 
+
+```{r}
+compmus2025_filtered |>
+  ggplot(aes(x = valence, y = arousal, colour = ai, size = tempo)) +
+  geom_point(alpha = 0.8) +
+  scale_color_viridis_d() +
+  labs(
+    x = "Arousal",
+    y = "Dancebility",
+    size = "Tempo",
+    colour = "AI"
+  )
+```
+
+
+***
+
+**What is visible**
+The AI - generated tracks and non- AI generated tracks are spread over the plot. The most tracks have are between 3.5 and 5.5 in arousal and are concentrated around 4.0 for arousal and danceability 4.0 - 4.5. The most AI generated tracks are slightly higher in danceability. There is not really a dominant bpm within this plot, all the tracks are between 140 - 160 bpm. 
+
+
+### Conclusion
+This assignment for Computational Musicology has been an educational adventure in which I gained many new insights. It was particularly interesting to apply various analytical methods and gain a deeper understanding of the two selected tracks.
+
+The most valuable learning experience for me was the tempogram analysis, as it provided a fascinating perspective on the rhythmic structure and dynamics of the tracks. It significantly enhanced my understanding of musical time patterns. Additionally, I found it intriguing to see how different visualizations – from ceptograms to key estimations – all contribute to a richer musical interpretation.
+
+I also found it particularly interesting to see where my tracks were positioned within the visualizations compared to those of my fellow students. This comparative aspect added an extra layer of insight, allowing me to understand the unique characteristics of my tracks in a broader musical context.
+
+I am very pleased with the outcomes of the various analyses and visualizations, and I will certainly take this experience with me into my master's studies. Finally, I would like to thank HONEY for allowing the use of their tracks and, of course, express my gratitude to the professor and student assistants for their valuable guidance and support throughout this assignment.
+
+Sanne Veltman
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
