@@ -1,7 +1,7 @@
 ---
-title: "Dashboard"
+title: "Computational Musicology portfolio 2025"
 author: "Sanne Veltman"
-date: "2025-02-19"
+date: "2025-03-29"
 output: 
   flexdashboard::flex_dashboard:
     storyboard: true
@@ -193,7 +193,7 @@ ggplotly(p)  # Maak de plot interactief
 
 *** 
 **What is visible?**
-in this visualization you see the class corpus based on arousal, tempo and the colors are the danceability. The two red dots show my tracks within the visualisation. The tempo of both of tracks are, This is very interesting to see, it is like a worldmap with all of the tracks from the students! The tempo of my tracks are correct in this visualisation. If I look at the tracks of the other students, I don't see a really significant correlation between tempo or arousal. But if the tempo goes down, you can see that the danceability gets a bit lighter in its color. There could be a possible correlation between tempo and danceability here.
+in this visualization you see the class corpus based on arousal, tempo and the colors are the danceability. The two red dots show my tracks within the visualization. The tempo of both of tracks are, This is very interesting to see, it is like a world map with all of the tracks from the students! The tempo of my tracks are correct in this visuali`ation. If I look at the tracks of the other students, I don't see a really significant correlation between tempo or arousal. But if the tempo goes down, you can see that the danceability gets a bit lighter in its color. There could be a possible correlation between tempo and danceability here.
 
 ### Histogram class corpus versus own tracks
 
@@ -603,7 +603,7 @@ In Track 2, the timbre analysis reveals the presence of twelve smaller thematic 
 
 ***
 **What is visible**
-These graphs represent energy novelty over time in seconds. The graph from the first track has a high peak surpassing 2.0 The highest peak in the second graph is below 1.0, meaning that the most intense energy change is less extreme compared to the first graph. In the first graph there is a prominent spike after 150 seconds while the second graph does not have not such a strong event toward the end. The overall energy novelty values in the second graph appear lower, meaning there are fewer dramatic changes in energy compared to the firs graph. The first graph has more periods of very low activity between bursts, while the second graph maintains a more consistent level of fluctuations. In the second track there is a high peak around 50 seconds, this is again explicit word in the track. 
+These graphs represent energy novelty over time in seconds. The graph from the first track has a high peak surpassing 2.0 The highest peak in the second graph is below 1.0, meaning that the most intense energy change is less extreme compared to the first graph. In the first graph there is a prominent spike after 150 seconds while the second graph does not have not such a strong event toward the end. The overall energy novelty values in the second graph appear lower, meaning there are fewer dramatic changes in energy compared to the firs graph. The first graph has more periods of very low activity between bursts, while the second graph maintains a more consistent level of fluctuations. In the second track there is a high peak around 50 seconds, this is again the explicit word in the track. 
 
 
 ### Tempogram track 1
@@ -621,7 +621,7 @@ These graphs represent energy novelty over time in seconds. The graph from the f
 ***
 
 **What is visible?**
-In the first tempogram is a tempogram of track 1, shows multiple tempo candidates across different BPM values. It a more complex structure, this is possibly reflecting tempo ambiguities or polyrhythms within the track. The tempo appears less stable, with more fluctuations over time. This suggests the analysis does not assume periodic repetition, leading to more variability in detected tempo values. The second tempogram is the cycles tempogram version of track one, displays a clearer more stable tempo band. It shows periodic patterns, meaning the analysis assumes a cyclic structure in the music. The dominant tempo line is stronger and more continuous, reflecting the assumption that rhythmic patterns repeat over time. In the non - cyclic case, the analysis does not assume repeating rhythmic patterns, leading to more tempo variations. In the cyclic case, the analysis enforces periodicity, resulting in a more stable and structured tempo variation. This suggests that the piece has some level of rhythmic repetition. The actual BPM of the first track is 87 BPM.
+In the first tempogram is a tempogram of track 1, shows multiple tempo candidates across different BPM values. The tempogram shows multiple horizontal lines. This indicates where the tempo remains elatively constant. These lines also suggest a clear rhythmic structure. Around 50 and 120 seconds there is a visible shift in the tempo. From my interpretation this suggests a rhythmic variation in music or could indicate transitions between parts of the song. Overall the song has a structures rhythmic composition with clear tempo segments and transitions with a dynamic structure.The actual BPM of the first track is 87 BPM.
 
 
 
@@ -641,7 +641,7 @@ In the first tempogram is a tempogram of track 1, shows multiple tempo candidate
 
 ***
 **What is visible**
-This tempogram is a version of track 2. According to the tempogram there are multiple strong tempo candidates. Several horizontal bands at different BPM values indicate multiple tempo interpretations. There is a sudden transition around 50 seconds, there is a sharp change in the structure which is possibly marking a change in musical section or rhythmic pattern. There is a higher tempo ambiguity in the first section. The first half, before the 50 seconds, shows a more dense and fluctuating tempo pattern. This suggests rhythmic complexity or variations. In the second part of the tempogram there is a more stable tempo. After the transition, the dominant tempo lines become clearer and more stable. This indicates a more regular rhythmic pattern. The actual BPM of the second track is 127 BPM.
+This tempogram is a version of track 2. Several horizontal bands at different BPM values indicate multiple tempo interpretations. There is a sudden transition around 50 seconds, there is a sharp change in the structure which is possibly marking a change in musical section or rhythmic pattern. There is a higher tempo ambiguity in the first section. The first half, before the 50 seconds, shows a more dense and fluctuating tempo pattern. This suggests rhythmic complexity or variations. In the second part of the tempogram there is a more stable tempo. After the transition, the dominant tempo lines become clearer and more stable. This indicates a more regular rhythmic pattern. The actual BPM of the second track is 127 BPM.
 
 
 
